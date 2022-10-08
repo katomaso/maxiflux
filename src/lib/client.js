@@ -1,6 +1,7 @@
 import { Miniflux, InvalidCredentialsError, OfflineError, EntryStatus } from "./miniflux.js"
 import { writable } from "svelte/store"
 import { page, next } from "./router.js"
+import { all_entries } from "./cache.js";
 
 export const OK = "ONLINE", OFFLINE = "OFFLINE", NOT = "NOT CONNECTED"; // error either credentials or server error
 export let connected = writable(NOT) // reactive property for the frontend
@@ -21,38 +22,27 @@ export function mark_read(id) {
   get_client()?.update_entries([id], EntryStatus["READ"]);
 }
 
-class Client {
-  miniflux = null
-  updated = null // datetime
-  update_after_days = 5 // update cache from online only after 5 days of the last update
-  
-  /**
-   * Connect
-   * @param {string} url full url (can omit https:// because it will be enforced anyway)
-   * @param {string} password password or APIkey
-   * @param {string} username username when using password login (OPTIONAL)
-   */
-  connect(url, password, username) {
-    if (!username) {
-      // using API key sign-on without username
+async function sync_cache_to_server(val) {
+  if(val != OK) return;
+
+  let read = []
+  let deleted = []
+  let entries = await all_entries()
+  entries.each((entry) => {
+    if (entry.status ==  EntryStatus["READ"]) {
+      read.push(entry.id)
     }
+    if (entry.status ==  EntryStatus["REMOVED"]) {
+      deleted.push(entry.id)
+    }
+  })
+  if(read.length > 0) {
+    get_client()?.update_entries(read, EntryStatus["READ"]);
   }
-
-  is_connected() {
+  if(deleted.length > 0) {
+    get_client()?.update_entries(deleted, EntryStatus["REMOVED"]);
   }
-
-  get_name() {
-  }
-
-  /**
-   * Return data object with {total:int, updated:Date, source="cache"|"online", entries:[Entry]} keys.
-   * Might throw exception Login
-   */
-  get_data(force_refresh) {
-
-  }
-
-  mark_read(id) {}
-  delete(id) {}
-
 }
+
+connected.subscribe(sync_cache_to_server)
+// connected.subscribe(updateEntries)

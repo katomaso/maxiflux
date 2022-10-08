@@ -1,8 +1,6 @@
 <script>
   import { onMount } from "svelte";
-  import { get_entry } from "./cache.js";
-  import { client, mark_read } from "./client.js";
-  import { EntryStatus } from "./miniflux.js";
+  import { get_entry, mark } from "./cache.js";
   import { navigateTo } from "./router.js";
 
   export let id;
@@ -16,12 +14,15 @@
 </script>
 
 <main>
+  {#if article}
   <nav style="display:flex;justify-content:space-between">
     <button on:click={() => navigateTo("Articles")}>🔙 Articles</button>
-    <button on:click={() => mark_read(id)}>✔️ Mark read</button>
+    {#if article.status == "unread"}
+      <button on:click={() => mark(id, "READ")}>✔️ Mark read</button>
+    {/if}
+    <button on:click={() => {mark(id, "REMOVED"); navigateTo("Articles")}}>👋 Delete</button>
   </nav>
-  {#if article}
-  <h3>{article.title}</h3>
+  <h3>{article.title} ({article.status})</h3>
   <p>{@html article.content}</p>
   {/if}
 </main>
