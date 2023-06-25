@@ -94,6 +94,7 @@ export async function get_entry(id) {
 
 export async function mark(id, status) {
   if (status != "READ" && status != "REMOVED") throw new Error("Must be READ or REMOVED");
+  console.log(`Atempting to mark article ${id} as ${status}`);
   let data = await get_entry(id)
   return dbOpened.then(db => {
     const dbx = db.transaction(["articles"], "readwrite").objectStore("articles");
@@ -139,13 +140,12 @@ export async function update_data(data) {
 // @return age in miliseconds from now
 export function get_age() {
   if (localStorage.getItem("cache_updated") == null) {
-    return NaN
+    return -1;
   }
   return Date.now() - new Date(localStorage.getItem("cache_updated")).getTime();
 }
 
 // @return age in days from now
-export function to_days() {
-  let age = get_age();
+export function to_days(age) {
   return Math.round(age / 1000 / 3600 / 24);
 }

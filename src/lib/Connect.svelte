@@ -15,7 +15,7 @@
             url = "https://" + url; 
         }
         if(password == "") {
-            localStorage.getItem("login_password");
+            password = localStorage.getItem("login_password");
         }
         return client.connect(url, username, password).then(() => {
             console.log("Successfuly logged in");
@@ -52,7 +52,7 @@
         <label for="url">Server</label><input type="text" name="url" bind:value={url}><br>
         <label for="username">Username</label><input type="text" name="username" bind:value={username}><br>
         <label for="password">Password</label><input type="password" name="password" bind:value={password}><br>
-        {#if error}<em class="error">Login failed with {error}</em>{/if}
+        {#if error}<br><em class="error">Login failed with {error}</em><br>{/if}
         <input type="submit" value="Connect" on:click|preventDefault|stopPropagation={login}>
         <input type="checkbox" name="remember" bind:value={remember}>&nbsp;Zapamatovat heslo
         <br>

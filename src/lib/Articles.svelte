@@ -7,10 +7,11 @@
     let data = null;
     async function refresh_data(force_refresh) {
         let age = get_age()
-        if ($connected == NOT && (age == null || force_refresh)) {
+        if ($connected == NOT && (age < 0 || force_refresh)) {
             $next = "Articles";
             $page = "Connect";
-        } else if ($connected == OK && (force_refresh || age == null)) {
+        } else if ($connected == OK && (force_refresh || age < 0)) {
+            console.log(`Refreshing data because force_refresh(${force_refresh}) or age({$age}) < 0`);
             data = await client.get_entries({order: "changed_at"});
             update_data(data);
         } else {
@@ -18,29 +19,43 @@
             data = await get_data();
         }
     }
+
     onMount(() => refresh_data(false));
 </script>
 
 <main>
     {#if data}
-    {@const age = to_days(get_age())}
-    {#if $connected == NOT}
+    {@const days_old = to_days(get_age())}
+    <nav class="absolute">
+        {#if $connected == NOT}
         <button on:click={(_) => sneakPeakTo("Connect", "Articles")}>Connect</button>
-    {:else}
-        <div>Articles are {#if age == 0}current{:else}{{age}}days old{/if}
-            <button on:click={(e) => refresh_data(true)}>Refresh articles</button> (you are currently {$connected})
-        </div>
-    {/if}
+        {:else}
+        <button on:click={(e) => refresh_data(true)}>🔄</button>{#if days_old > 0}<em>(last sync {days_old} days ago)</em>{/if}
+        {/if}
+    </nav>
     <h1>Articles</h1>
         Found {data.total} articles<br>
-        {#each data.entries as entry}
+        <h2>Unread articles</h2>
+        {#each data.entries.filter(e => e.status == "unread") as entry}
         <div style="display:flex;flex-direction:row;">
-            <a class="close" on:click={(e) => {mark(entry.id, "REMOVED"); refresh_data()}}>x</a>
+            <button class="close" on:click={(e) => {mark(entry.id, "REMOVED"); refresh_data()}}>x</button>
             <span style="flex-grow:4">
                 <h3>{entry.title}</h3>
-                <em>By {entry.author}<date> on {new Date(entry.changed_at).toLocaleDateString()}</date></em>
+                <em>From {entry.feed.title} on <date>{new Date(entry.changed_at).toLocaleDateString()}</date></em>
             </span>
-            <a class="read" on:click={(e) => navigateTo("Article", {"id" :entry.id})}>&gt;</a>
+            <a href="article/{entry.id}" class="read" on:click|preventDefault={(e) => navigateTo("Article", {"id": entry.id})}>&gt;</a>
+        </div>
+        {/each}
+
+        <h2>Read articles</h2>
+        {#each data.entries.filter(e => e.status == "read") as entry}
+        <div style="display:flex;flex-direction:row;">
+            <button class="close" on:click={(e) => {mark(entry.id, "REMOVED"); refresh_data()}}>x</button>
+            <span style="flex-grow:4">
+                <h3>{entry.title}</h3>
+                <em>From {entry.feed.title} on <date>{new Date(entry.changed_at).toLocaleDateString()}</date></em>
+            </span>
+            <a href="article/{entry.id}" class="read" on:click|preventDefault={(e) => navigateTo("Article", {"id": entry.id})}>&gt;</a>
         </div>
         {/each}
     {/if}
@@ -67,5 +82,10 @@
     }
     .read {
         color: green;
+    }
+    nav {
+        position: absolute;
+        top: 0;
+        right: 0;
     }
 </style>
