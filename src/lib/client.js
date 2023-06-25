@@ -23,12 +23,13 @@ export function mark_read(id) {
 }
 
 async function sync_cache_to_server(val) {
+  console.log(`Syncing cache to server? ${val == OK}`)
   if(val != OK) return;
 
   let read = []
   let deleted = []
   let entries = await all_entries()
-  entries.each((entry) => {
+  entries.forEach((entry) => {
     if (entry.status ==  EntryStatus["READ"]) {
       read.push(entry.id)
     }

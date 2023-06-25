@@ -3,8 +3,6 @@
 
 import { Miniflux, EntryStatus } from "./miniflux";
 
-console.log("./cache.js imported");
-
 /** Example data:
  * {
  * feed_id: 1,
@@ -116,7 +114,7 @@ export async function mark(id, status) {
 export async function all_entries() {
   return dbOpened.then(db => {
     const dbx = db.transaction(["articles"]).objectStore("articles");
-    const req = dbx.getAll()
+    const req = dbx.getAll();
     return new Promise((resolve, _) => {
       req.onsuccess = () => {
         resolve(req.result);
@@ -125,16 +123,27 @@ export async function all_entries() {
   });
 }
 
-export async function update_data(data) {
-  return dbOpened.then(db => {
-    const dbx = db.transaction(["articles"], "readwrite").objectStore("articles");
-    data.entries.forEach((entry) => {
-      // get or update the article
-      dbx.add(entry)
-    });
-    // reset the max_age to `now` to show the DB was just updated
-    localStorage.setItem("cache_updated", new Date().toISOString())
+export async function clear() {
+  let db = await dbOpened;
+  const dbx = db.transaction(["articles"], "readwrite").objectStore("articles");
+  return new Promise((resolve, _) => {
+    dbx.clear().onsuccess = resolve;
+    console.log("Cache cleared");
   });
+}
+
+export async function update(data) {
+  let db = await dbOpened;
+  const dbx = db.transaction(["articles"], "readwrite").objectStore("articles");
+  console.log("Cache updated");
+  return data.entries.map( // TODO: update "cache_updated" only when all records were added successfully : Promise.all or something
+    (entry) => new Promise((resolve, _) => {
+      dbx.add(entry).onsuccess = () => {
+        localStorage.setItem("cache_updated", new Date().toISOString());
+        resolve();
+      }
+    }
+  ));
 }
 
 // @return age in miliseconds from now

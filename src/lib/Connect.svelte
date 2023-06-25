@@ -29,9 +29,7 @@
                 localStorage.setItem("login_remember", "no");
             }
             connected.set(OK);
-            console.log("Content of page before redirect", $page);
             page.set($next || "Articles");
-            console.log("Content of page after redirect", $page);
         }).catch(err => {
             if (err instanceof OfflineError) {
                 connected.set(OFFLINE);

@@ -1,7 +1,7 @@
 <script>
     import { onMount } from "svelte";
     import { client, connected, OK, NOT } from "./client.js";
-    import { to_days, get_age, get_data, update_data, mark } from "./cache.js";
+    import { to_days, get_age, get_data, update, mark, clear } from "./cache.js";
     import { page, next, navigateTo, sneakPeakTo } from "./router.js";
 
     let data = null;
@@ -11,9 +11,10 @@
             $next = "Articles";
             $page = "Connect";
         } else if ($connected == OK && (force_refresh || age < 0)) {
-            console.log(`Refreshing data because force_refresh(${force_refresh}) or age({$age}) < 0`);
-            data = await client.get_entries({order: "changed_at"});
-            update_data(data);
+            console.log(`Refreshing data because force_refresh(${force_refresh}) or age(${age}) < 0`);
+            data = await client.get_entries(); // TODO: user-defined ordering {order: "changed_at"}
+            await clear();
+            await update(data);
         } else {
             // handle offline case
             data = await get_data();
