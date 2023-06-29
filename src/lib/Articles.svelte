@@ -3,6 +3,7 @@
     import { client, connected, OK, NOT } from "./client.js";
     import { to_days, get_age, get_data, update, mark, clear } from "./cache.js";
     import { page, next, navigateTo, sneakPeakTo } from "./router.js";
+    import Pager from "./Pager.svelte";
 
     let data = null;
     async function refresh_data(force_refresh) {
@@ -26,54 +27,62 @@
 
 <main>
     {#if data}
+    <Pager/>
     {@const days_old = to_days(get_age())}
-    <nav class="absolute">
+    <nav>
         {#if $connected == NOT}
         <button on:click={(_) => sneakPeakTo("Connect", "Articles")}>Connect</button>
         {:else}
         <button on:click={(e) => refresh_data(true)}>🔄</button>{#if days_old > 0}<em>(last sync {days_old} days ago)</em>{/if}
         {/if}
     </nav>
-    <h1>Articles</h1>
-        Found {data.total} articles<br>
-        <h2>Unread articles</h2>
-        {#each data.entries.filter(e => e.status == "unread") as entry}
-        <div style="display:flex;flex-direction:row;">
-            <button class="close" on:click={(e) => {mark(entry.id, "REMOVED"); refresh_data()}}>x</button>
-            <span style="flex-grow:4">
-                <h3>{entry.title}</h3>
-                <em>From {entry.feed.title} on <date>{new Date(entry.changed_at).toLocaleDateString()}</date></em>
-            </span>
-            <a href="article/{entry.id}" class="read" on:click|preventDefault={(e) => navigateTo("Article", {"id": entry.id})}>&gt;</a>
-        </div>
-        {/each}
-
-        <h2>Read articles</h2>
-        {#each data.entries.filter(e => e.status == "read") as entry}
-        <div style="display:flex;flex-direction:row;">
-            <button class="close" on:click={(e) => {mark(entry.id, "REMOVED"); refresh_data()}}>x</button>
-            <span style="flex-grow:4">
-                <h3>{entry.title}</h3>
-                <em>From {entry.feed.title} on <date>{new Date(entry.changed_at).toLocaleDateString()}</date></em>
-            </span>
-            <a href="article/{entry.id}" class="read" on:click|preventDefault={(e) => navigateTo("Article", {"id": entry.id})}>&gt;</a>
-        </div>
-        {/each}
+    <h1>Articles ({data.total})</h1>
+    <nav>
+        <span><button>Read</button>/<button>Unread</button></span>
+        <select name="sort">
+            <option value="">-- sort by --</option>
+            <option value="-last_changed">Newest</option>
+            <option value="+last_changed">Oldest</option>
+            <option value="random">Random</option>
+        </select>
+    </nav>
+    <ul>
+    {#each data.entries.filter(e => e.status == "unread") as entry}
+      <li>
+        <button class="close" on:click={(e) => {mark(entry.id, "REMOVED"); refresh_data()}}>x</button>
+        <a href="article/{entry.id}" on:click|preventDefault={(e) => navigateTo("Article", {"id": entry.id})}>
+            <h2>{entry.title}</h2>
+            <em>From {entry.feed.title} on <date>{new Date(entry.changed_at).toLocaleDateString()}</date></em>
+        </a>
+      </li>
+    {/each}
+    </ul>
     {/if}
 </main>
 
 <style>
-    div {
+    ul {
+        list-style: none;
+        margin: 1em 0 0 0; padding: 0;
+    }
+    ul li {
         margin-bottom: 2em;
         border: 2px solid grey;
+        display: flex;
     }
-    a {
+    ul li a {
         display: inline-block;
-        margin: auto;
-        font-size: 32pt;
-        min-width: 2em;
-        line-height: 2em;
-        cursor: pointer;
+        color: white;
+        width: 100%;
+        padding: 0.5em 1em;
+    }
+    ul li a h2 {
+        text-align: left;
+        margin: 0.1em 0;
+        font-size: 12pt;
+    }
+    ul li a em {
+        font-size: 10pt;
     }
     a:hover {
         background-color: rgba(0, 0, 0, 0.9);
@@ -81,12 +90,8 @@
     .close {
         color: red;
     }
-    .read {
-        color: green;
-    }
     nav {
-        position: absolute;
-        top: 0;
-        right: 0;
+        display: flex;
+        justify-content: space-between;
     }
 </style>

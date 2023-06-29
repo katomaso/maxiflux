@@ -123,6 +123,16 @@ export async function all_entries() {
   });
 }
 
+export async function get_next(current) {
+  const entries = await all_entries();
+  let found = false;
+  for(const entry of entries) {
+    if (found) return entry; // return the record after the current item was found
+    found = (entry.id == current.id);
+  }
+  return entries.at(-1);
+}
+
 export async function clear() {
   let db = await dbOpened;
   const dbx = db.transaction(["articles"], "readwrite").objectStore("articles");

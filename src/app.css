@@ -31,7 +31,7 @@ label {
   margin-right: 0.5em;
 }
 
-label, input {
+label, input, select {
   font-size: 13pt;
   margin-bottom: 7pt;
 }
@@ -45,12 +45,16 @@ body {
 }
 
 h1 {
-  font-size: 3.2em;
+  font-size: 32pt;
   line-height: 1.1;
 }
 
 h1, h2, h3 {
   text-align: center;
+}
+
+p img {
+  width: 100%;
 }
 
 .card {
@@ -63,7 +67,7 @@ h1, h2, h3 {
   padding: 2ch;
 }
 
-button {
+button, select {
   border-radius: 8px;
   border: 1px solid transparent;
   padding: 0.6em 1.2em;
