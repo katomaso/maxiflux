@@ -1,39 +1,55 @@
 <script>
     import { onMount } from "svelte";
-    import { client, connected, OK, NOT } from "./client.js";
-    import { to_days, get_age, get_data, update, mark, clear } from "./cache.js";
+    import { client, sync_with_server, connected, OK, NOT } from "./client.js";
+    import { cache } from "./cache.js";
     import { page, next, navigateTo, sneakPeakTo } from "./router.js";
     import Pager from "./Pager.svelte";
 
     let data = null;
-    async function refresh_data(force_refresh) {
-        let age = get_age()
-        if ($connected == NOT && (age < 0 || force_refresh)) {
-            $next = "Articles";
-            $page = "Connect";
-        } else if ($connected == OK && (force_refresh || age < 0)) {
-            console.log(`Refreshing data because force_refresh(${force_refresh}) or age(${age}) < 0`);
-            data = await client.get_entries(); // TODO: user-defined ordering {order: "changed_at"}
-            await clear();
-            await update(data);
-        } else {
-            // handle offline case
-            data = await get_data();
-        }
+
+    // convert miliseconds to days
+    function as_days(age) {
+        return Math.round(age / 1000 / 3600 / 24);
     }
 
-    onMount(() => refresh_data(false));
+    async function download() {
+        if ($connected == NOT) {
+            $next = "Articles";
+            $page = "Connect";
+            return;
+        }
+        if ($connected != OK) {
+            console.log("Connection failed " + $connected);
+        }
+        await sync_with_server(cache.entries());
+        return client.get_entries().then((data) => cache.clear().then(() => cache.update(data.entries)));
+    }
+
+    async function refresh_data() {
+        let age = cache.get_age()
+        if(age < 0) {
+            await download();
+        }
+        data = await cache.query();
+    }
+
+    onMount(refresh_data);
 </script>
 
 <main>
     {#if data}
     <Pager/>
-    {@const days_old = to_days(get_age())}
-    <nav>
+    {@const days_old = as_days(cache.get_age())}
+    <nav id="download">
         {#if $connected == NOT}
         <button on:click={(_) => sneakPeakTo("Connect", "Articles")}>Connect</button>
         {:else}
-        <button on:click={(e) => refresh_data(true)}>🔄</button>{#if days_old > 0}<em>(last sync {days_old} days ago)</em>{/if}
+        <select name="limit">
+            <option value="all">limit</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="all">all</option></select>
+        <button on:click={(e) => download()}>🔄</button>{#if days_old > 0}<em>(last sync {days_old} days ago)</em>{/if}
         {/if}
     </nav>
     <h1>Articles ({data.total})</h1>
@@ -41,15 +57,15 @@
         <span><button>Read</button>/<button>Unread</button></span>
         <select name="sort">
             <option value="">-- sort by --</option>
-            <option value="-last_changed">Newest</option>
-            <option value="+last_changed">Oldest</option>
+            <option value="latest">Latest</option>
+            <option value="oldest">Oldest</option>
             <option value="random">Random</option>
         </select>
     </nav>
     <ul>
-    {#each data.entries.filter(e => e.status == "unread") as entry}
+    {#each data.entries as entry}
       <li>
-        <button class="close" on:click={(e) => {mark(entry.id, "REMOVED"); refresh_data()}}>x</button>
+        <button class="close" on:click={(e) => {cache.mark(entry.id, "REMOVED"); e.currentTarget.parentElement.remove();}}>x</button>
         <a href="article/{entry.id}" on:click|preventDefault={(e) => navigateTo("Article", {"id": entry.id})}>
             <h2>{entry.title}</h2>
             <em>From {entry.feed.title} on <date>{new Date(entry.changed_at).toLocaleDateString()}</date></em>
@@ -72,7 +88,7 @@
     }
     ul li a {
         display: inline-block;
-        color: white;
+        color: #555;
         width: 100%;
         padding: 0.5em 1em;
     }

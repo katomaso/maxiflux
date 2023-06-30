@@ -1,43 +1,42 @@
 <script>
-  import { onMount, afterUpdate } from "svelte";
-  import { get_entry, get_next, mark } from "./cache.js";
+  import { onMount, beforeUpdate, afterUpdate } from "svelte";
+  import { cache } from "./cache.js";
   import { navigateTo } from "./router.js";
   import Pager from "./Pager.svelte";
 
   export let id;
 
-  let article;
+  let article = null;
   let fresh = true;
 
   async function load_data() {
-    article = await get_entry(id);
-    document.addEventListener("keydown", (event) => console.log(event));
+    article = await cache.get_entry(id);
   }
 
   function change_article(x) {
     window.scroll(0, 0);
-    fresh = true;
     article = x;
   }
+  onMount(load_data);
 
-  let read_marker = new IntersectionObserver(() => { if(article && fresh) {fresh = false} else mark(article.id, "READ"); }, {
+  let read_marker = new IntersectionObserver(() => { if(article && fresh) {fresh = false} else cache.mark(article.id, "READ"); }, {
     root: document.querySelector("#scrollArea"),
     rootMargin: "0px",
     threshold: 1.0,
   });
-  let observer_called = false;
+  
+  beforeUpdate(() => {
+    fresh = true; // reset freshness before state change
+  })
 
-  onMount(load_data);
-
-  afterUpdate(() => {
+  let marker_bound = false;
+  afterUpdate(async () => {
     let el = document.querySelector("#nav-bottom");
-    if (el && !observer_called) {
+    if (el && !marker_bound) {
       read_marker.observe(el);
-      observer_called = true;
+      marker_bound = true;
     };
-    console.log("After update called");
-    fresh = true;
-	});
+  });
 </script>
 
 <main>
@@ -45,16 +44,16 @@
   <Pager/>
   <nav>
     <button on:click={() => navigateTo("Articles")}>🔙 Articles</button>
-    <button on:click={() => {mark(id, "REMOVED"); navigateTo("Articles")}}>👋 Delete</button>
-    <button on:click={() => {mark(article.id, "READ"); get_next(article).then(change_article)}}>Next 🢥</button>
+    <button on:click={() => {cache.mark(id, "REMOVED"); navigateTo("Articles")}}>👋 Delete</button>
+    <button on:click={() => {cache.mark(article.id, "READ"); cache.get_next(article).then(change_article)}}>Next 🢥</button>
   </nav>
   <h1>{article.title} ({article.status})</h1>
   {@html article.content}
   <br>
   <nav id="nav-bottom">
-    <button on:click={() => {mark(article.id, "READ"); navigateTo("Articles");} }>🔙 Articles</button>
-    <button on:click={() => {mark(article.id, "REMOVED"); navigateTo("Articles")}}>👋 Delete</button>
-    <button on:click={() => {mark(article.id, "READ"); get_next(article).then(change_article)}}>Next 🢥</button>
+    <button on:click={() => {cache.mark(article.id, "READ"); navigateTo("Articles");} }>🔙 Articles</button>
+    <button on:click={(e) => {cache.mark(article.id, "REMOVED"); e.currentTarget.remove()}}>👋 Delete</button>
+    <button on:click={() => {cache.mark(article.id, "READ"); cache.get_next(article).then(change_article)}}>Next 🢥</button>
   </nav>
   {/if}
 </main>

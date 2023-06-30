@@ -25,7 +25,7 @@ div {
     height: 90vh;
 }
 button {
-    width: 2rem;
+    width: 4rem;
     height: 33vh;
     text-align: center;
     line-height: 2rem;
