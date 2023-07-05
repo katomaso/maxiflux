@@ -1,74 +1,90 @@
 <script>
     import { onMount } from "svelte";
-    import { client, sync_with_server, connected, OK, NOT } from "./client.js";
+    import { client } from "./client.js";
     import { cache } from "./cache.js";
-    import { page, next, navigateTo, sneakPeakTo } from "./router.js";
+    import { filter } from "./filter.js";
+    import { navigateTo, sneakPeakTo } from "./router.js";
     import Pager from "./Pager.svelte";
 
     let data = null;
 
+    export let force_sync = false;
+
     // convert miliseconds to days
-    function as_days(age) {
-        return Math.round(age / 1000 / 3600 / 24);
+    function as_days_ago(date) {
+        return Math.round((new Date().getTime() - date.getTime()) / 1000 / 3600 / 24);
     }
 
-    async function download() {
-        if ($connected == NOT) {
-            $next = "Articles";
-            $page = "Connect";
+    function formatDate(date) {
+        return date.toLocaleDateString("en-GB", {month: "short", day: "numeric", year: "numeric"});
+    }
+
+    async function sync() {
+        if (!client.connected) {
+            console.log("Client not connected - cannot download new data");
+            sneakPeakTo("Connect", {force_sync: true});
             return;
         }
-        if ($connected != OK) {
-            console.log("Connection failed " + $connected);
-        }
-        await sync_with_server(cache.entries());
-        return client.get_entries().then((data) => cache.clear().then(() => cache.update(data.entries)));
+        await client.sync(await cache.entries());
+        let data = await client.query(filter);
+        await cache.clear();
+        await cache.update(data.entries);
     }
 
-    async function refresh_data() {
-        let age = cache.get_age()
-        if(age < 0) {
-            await download();
+    async function refresh(_sync=false) {
+        if(cache.age == null || _sync || force_sync) {
+            await sync();
         }
-        data = await cache.query();
+        data = await cache.query(filter);
     }
 
-    onMount(refresh_data);
+    onMount(async () => {
+        await cache.connect();
+        refresh();
+    });
 </script>
 
 <main>
+    <nav style="justify-content: flex-end;">
+        <div>
+            {#if cache.age != null}
+            Last sync: {#if as_days_ago(cache.age) > 0}{as_days_ago(cache.age)} days{:else}a moment{/if} ago |
+            {/if}
+            <button on:click={() => {refresh(true)}}>🗘</button>
+        </div>
+    </nav>
+
     {#if data}
     <Pager/>
-    {@const days_old = as_days(cache.get_age())}
-    <nav id="download">
-        {#if $connected == NOT}
-        <button on:click={(_) => sneakPeakTo("Connect", "Articles")}>Connect</button>
-        {:else}
-        <select name="limit">
-            <option value="all">limit</option>
-            <option value="50">50</option>
-            <option value="100">100</option>
-            <option value="all">all</option></select>
-        <button on:click={(e) => download()}>🔄</button>{#if days_old > 0}<em>(last sync {days_old} days ago)</em>{/if}
-        {/if}
-    </nav>
-    <h1>Articles ({data.total})</h1>
+    <h1>Articles ({data.length})</h1>
     <nav>
-        <span><button>Read</button>/<button>Unread</button></span>
-        <select name="sort">
-            <option value="">-- sort by --</option>
-            <option value="latest">Latest</option>
-            <option value="oldest">Oldest</option>
-            <option value="random">Random</option>
-        </select>
+        <span>
+            <button on:click={(e) => {filter.setStatus("read"); refresh();}}>Read</button>
+            /
+            <button on:click={(e) => {filter.setStatus("unread"); refresh();}}>Unread</button>
+        </span>
+        <span>
+            <label for="sort">Sort:</label>
+            <select name="sort" on:change={(e) => {if(e.target.value == "latest") {filter.setDirectionDesc();} else {filter.setDirectionAsc()}; refresh();}}>
+                <option value="latest">Latest</option>
+                <option value="oldest">Oldest</option>
+            </select>
+            &nbsp;
+            <label for="sort">Feed:</label>
+            <select name="feed" on:change={(e) => {filter.setFeed(parseInt(e.target.value)); refresh();}}>
+            {#await cache.feeds() then feeds} 
+                <option value="1">TODO</option>
+            {/await}
+            </select>
+        </span>
     </nav>
     <ul>
-    {#each data.entries as entry}
+    {#each data as entry}
       <li>
         <button class="close" on:click={(e) => {cache.mark(entry.id, "REMOVED"); e.currentTarget.parentElement.remove();}}>x</button>
         <a href="article/{entry.id}" on:click|preventDefault={(e) => navigateTo("Article", {"id": entry.id})}>
             <h2>{entry.title}</h2>
-            <em>From {entry.feed.title} on <date>{new Date(entry.changed_at).toLocaleDateString()}</date></em>
+            <em>From {entry.feed.title} published <date>{formatDate(entry.published_at)}, changed: {formatDate(entry.changed_at)}</date></em>
         </a>
       </li>
     {/each}
@@ -86,11 +102,19 @@
         border: 2px solid grey;
         display: flex;
     }
+    ul li button {
+        border-radius: 0;
+        background: none;
+    }
+    ul li button:hover {
+        background-color: rgba(0, 0, 0, 0.2);
+    }
     ul li a {
         display: inline-block;
-        color: #555;
         width: 100%;
         padding: 0.5em 1em;
+        color: #eee;
+        text-decoration: none;
     }
     ul li a h2 {
         text-align: left;
@@ -101,7 +125,7 @@
         font-size: 10pt;
     }
     a:hover {
-        background-color: rgba(0, 0, 0, 0.9);
+        background-color: rgba(0, 0, 0, 0.2);
     }
     .close {
         color: red;
@@ -109,5 +133,10 @@
     nav {
         display: flex;
         justify-content: space-between;
+    }
+    @media (prefers-color-scheme: light) {
+        ul li a {
+            color: #333;
+        }
     }
 </style>

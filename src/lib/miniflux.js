@@ -54,7 +54,10 @@ export class Miniflux {
                     throw new Error(`${response.status}: ${response.statusText}`);
                 }
             }
-            return response.json();
+            if(response.status == 200 || response.status == 201) {
+                return response.json();
+            }
+            return null;
         });
     }
     get = (path) => this.request(path, null, 'GET');

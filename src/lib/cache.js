@@ -1,7 +1,16 @@
 // Cache incoming articles in IndexedDB implementing a logic to update read/obsolete articles.\
 // Try to keep max MAX_ARTICLES in the cache.
 
-import { Miniflux, EntryStatus } from "./miniflux";
+import { EntryStatus } from "./miniflux";
+
+function promise_result(req) {
+  return new Promise((resolve, _) => {
+    req.onsuccess = () => {
+      console.log("PromiseResult resolved: ", req.result);
+      resolve(req.result);
+    } 
+  });
+}
 
 /** Example data:
  * {
@@ -19,7 +28,14 @@ import { Miniflux, EntryStatus } from "./miniflux";
  * changed_at: "2022-08-20T15:31:00+02:00" // OPTIONAL
  * }
 */
+
 class Cache {
+
+  dbPromise;
+  db = null;
+  status = "unread";
+  index = "status-age";
+  indexes = ["status-age", "feed-age"];
 
   constructor(dbName) {
     this.dbPromise = new Promise((resolve, reject) => {
@@ -29,37 +45,40 @@ class Cache {
       };
       dbOpen.onupgradeneeded = (event) => {
         const db = event.target.result;
-        if (!db.objectStoreNames.contains('articles')) {
-          const objectStore = db.createObjectStore("articles", { keyPath: "id" });
-          objectStore.createIndex("status", "status", { unique: false });
-        }
+        const articleStore = db.createObjectStore("articles", { keyPath: "id" });
+        articleStore.createIndex("status-age", ["status", "published_at"], { unique: false });
+        articleStore.createIndex("feed-age", ["feed_id", "published_at"], { unique: false });
+        const feedStore = db.createObjectStore("feeds", { keyPath: "id" });
       }
       dbOpen.onsuccess = function (event) {
-        // Equal to: db = req.result;
         resolve(event.target.result);
         console.log(`Cache ${dbName} ready`);
       };
     });
-
-    this.filter = "unread";
-    this.ordering = "id"
   }
 
   async connect() {
-    return this.dbPromise;
+    return this.dbPromise.then((db) => {
+      this.db = db;
+    });
   }
 
   /** Query entries from the database with respect to global `sort` and `status` ordering/filtering */
-  async query() {
-    return this.connect().then(db => {
+  async query(filter) {
+    return this.dbPromise.then((db) => {
       const dbx = db.transaction(["articles"]).objectStore("articles");
-      let articles = {total: 0, entries: [], updated: new Date(localStorage.getItem("cache_updated"))}
+      let index = "status-age";
+      let keyrange = IDBKeyRange.bound([filter.status, new Date(0)], [filter.status, new Date()]);
+      if(filter.feed > 0) {
+        index = "feed-age";
+        keyrange = IDBKeyRange.bound([filter.feed, new Date(0)], [filter.feed, new Date()]);
+      }
       return new Promise((resolve, _) => {
-        dbx.index("status").openCursor(IDBKeyRange.only(this.filter)).onsuccess = (event) => {
+        let articles = [];
+        dbx.index(index).openCursor(keyrange, filter.directionDesc ? "prev" : "next").onsuccess = (event) => {
         const cursor = event.target.result;
         if (cursor) {
-          articles.entries.push(cursor.value);
-          articles.total += 1;
+          articles.push(cursor.value);
           cursor.continue();
         } else {
           resolve(articles);
@@ -68,51 +87,18 @@ class Cache {
     });
   }
 
-  setFilter(status) {
-    this.filter = status;
-  }
-
-  setOrdering() {
-
-  }
-
-  async mark_read(id) {
-    return this.dbPromise.then(db => {
-      const dbx = db.transaction(["articles"]).objectStore("articles");
-      const req = dbx.get(id)
-      
-      return new Promise((resolve, _) => {
-        req.onsuccess = () => {
-          let data = req.result;
-          data.status = EntryStatus["READ"]
-          let res = dbx.update(data);
-          res.onsuccess = () => {
-            resolve();
-          }
-        }
-      })
-    });
-  }
-
   async get_entry(id) {
-    return this.connect().then(db => {
-      const dbx = db.transaction(["articles"]).objectStore("articles");
-      const req = dbx.get(id)
-      return new Promise((resolve, _) => {
-        req.onsuccess = () => {
-          resolve(req.result);
-        } 
-      });
-    });
+    return promise_result(
+      this.db.transaction(["articles"]).objectStore("articles").get(id)
+    );
   }
 
   async mark(id, status) {
     if (status != "READ" && status != "REMOVED") throw new Error("Must be READ or REMOVED");
-    console.log(`Atempting to mark article ${id} as ${status}`);
-    let data = await this.get_entry(id)
     return this.dbPromise.then(db => {
       const dbx = db.transaction(["articles"], "readwrite").objectStore("articles");
       const req = dbx.get(id)
+      console.log(`Marking article ${id} as ${status}`);
       return new Promise((resolve, _) => {
         req.onsuccess = () => {
           let entry = req.result;
@@ -126,7 +112,6 @@ class Cache {
     });
   }
 
-
   async entries() {
     return this.dbPromise.then(db => {
       const dbx = db.transaction(["articles"]).objectStore("articles");
@@ -139,8 +124,14 @@ class Cache {
     });
   }
 
-  async get_next(current) {
-    const data = await this.query();
+  async feeds() {
+    return promise_result(
+      this.db.transaction(["feeds"]).objectStore("feeds").getAll()
+    );
+  }
+
+  async next_article(current, filter) {
+    const data = await this.query(filter);
     let found = false;
     for(const entry of data.entries) {
       if (found) return entry; // return the record after the current item was found
@@ -154,6 +145,7 @@ class Cache {
     const dbx = db.transaction(["articles"], "readwrite").objectStore("articles");
     return new Promise((resolve, _) => {
       dbx.clear().onsuccess = resolve;
+      localStorage.removeItem("cache_updated");
       console.log("Cache cleared");
     });
   }
@@ -162,8 +154,19 @@ class Cache {
     let db = await this.dbPromise;
     const dbx = db.transaction(["articles"], "readwrite").objectStore("articles");
     console.log("Cache updated");
+    
+    function max(values) {
+      let max = values[0];
+      for (let i = 1; i < values.length; i++) {
+        if (values[i] > max) max = values[i];
+      }
+      return max;
+    }
+
     return entries.map( // TODO: update "cache_updated" only when all records were added successfully : Promise.all or something
       (entry) => new Promise((resolve, _) => {
+        entry.published_at = new Date(entry.published_at);
+        entry.changed_at = max([new Date(entry.published_at), new Date(entry.changed_at), new Date(entry.created_at), new Date(entry.modified)]);
         dbx.add(entry).onsuccess = () => {
           localStorage.setItem("cache_updated", new Date().toISOString());
           resolve();
@@ -173,11 +176,11 @@ class Cache {
   }
 
   // @return age in miliseconds from now
-  get_age() {
+  get age() {
     if (localStorage.getItem("cache_updated") == null) {
-      return -1;
+      return null;
     }
-    return Date.now() - new Date(localStorage.getItem("cache_updated")).getTime();
+    return new Date(localStorage.getItem("cache_updated"));
   }
 
   
