@@ -35,7 +35,9 @@ class Client {
 
   async query(filter) {
     if(filter.feed > 0) {
-      return this.miniflux.get_feed_entries(filter.feed, this.#filter(filter));
+      return this.miniflux.get_feed_entries(filter.feed, {
+        order: "published_at", direction: filter.directionDesc ? "desc" : "asc", limit: 100
+    });
     }
     return this.miniflux.get_entries(this.#filter(filter));
   }
@@ -58,6 +60,10 @@ class Client {
     if(deleted.length > 0) {
       await this.miniflux.update_entries(deleted, EntryStatus["REMOVED"]);
     }
+  }
+
+  async get_feeds() {
+    return this.miniflux.feeds();
   }
 }
 

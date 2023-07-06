@@ -46,9 +46,10 @@ class Cache {
       dbOpen.onupgradeneeded = (event) => {
         const db = event.target.result;
         const articleStore = db.createObjectStore("articles", { keyPath: "id" });
+        const feedStore = db.createObjectStore("feeds", { keyPath: "id" });
         articleStore.createIndex("status-age", ["status", "published_at"], { unique: false });
         articleStore.createIndex("feed-age", ["feed_id", "published_at"], { unique: false });
-        const feedStore = db.createObjectStore("feeds", { keyPath: "id" });
+        articleStore.createIndex("updated-age", "updated_at", { unique: false });
       }
       dbOpen.onsuccess = function (event) {
         resolve(event.target.result);
@@ -112,7 +113,7 @@ class Cache {
     });
   }
 
-  async entries() {
+  async get_entries() {
     return this.dbPromise.then(db => {
       const dbx = db.transaction(["articles"]).objectStore("articles");
       const req = dbx.getAll();
@@ -124,10 +125,22 @@ class Cache {
     });
   }
 
-  async feeds() {
+  async get_feeds() {
     return promise_result(
       this.db.transaction(["feeds"]).objectStore("feeds").getAll()
     );
+  }
+
+  async get_feed_categories() {
+    let feeds = await this.get_feeds();
+    let categories = {};
+    for (let feed of feeds) {
+      if(!categories[feed.category.title]) {
+        categories[feed.category.title] = [];
+      }
+      categories[feed.category.title].append(feed);
+    }
+    return categories;
   }
 
   async next_article(current, filter) {
@@ -144,9 +157,10 @@ class Cache {
     let db = await this.dbPromise;
     const dbx = db.transaction(["articles"], "readwrite").objectStore("articles");
     return new Promise((resolve, _) => {
-      dbx.clear().onsuccess = resolve;
-      localStorage.removeItem("cache_updated");
-      console.log("Cache cleared");
+      dbx.clear().onsuccess = () => {
+        localStorage.removeItem("cache_updated");
+        console.log("Cache cleared");
+      }
     });
   }
 
@@ -163,16 +177,32 @@ class Cache {
       return max;
     }
 
-    return entries.map( // TODO: update "cache_updated" only when all records were added successfully : Promise.all or something
+    let now = new Date();
+    return Promise.all(entries.map( // TODO: update "cache_updated" only when all records were added successfully : Promise.all or something
       (entry) => new Promise((resolve, _) => {
         entry.published_at = new Date(entry.published_at);
         entry.changed_at = max([new Date(entry.published_at), new Date(entry.changed_at), new Date(entry.created_at), new Date(entry.modified)]);
+        entry.updated_at = now;
         dbx.add(entry).onsuccess = () => {
-          localStorage.setItem("cache_updated", new Date().toISOString());
           resolve();
         }
       }
-    ));
+    ))).then(() => localStorage.setItem("cache_updated", now.toISOString()));
+  }
+
+  async update_feeds(feeds) {
+    let db = await this.dbPromise;
+    const dbx = db.transaction(["feeds"], "readwrite").objectStore("feeds");
+
+    return new Promise((resolve, _) => {
+      dbx.clear().onsuccess = resolve
+    }).then(() => Promise.all(feeds.map(
+      (feed) => new Promise((resolve, _) => {
+        dbx.add(feed).onsuccess = () => {
+          resolve();
+        }
+      }
+    )))).then(() => localStorage.setItem("feeds_updated", new Date().toISOString()));
   }
 
   // @return age in miliseconds from now

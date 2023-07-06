@@ -7,6 +7,7 @@
     import Pager from "./Pager.svelte";
 
     let data = null;
+    let feeds = null;
 
     export let force_sync = false;
 
@@ -21,19 +22,28 @@
 
     async function sync() {
         if (!client.connected) {
-            console.log("Client not connected - cannot download new data");
+            console.log("Client not connected - redirecting to Connect");
             sneakPeakTo("Connect", {force_sync: true});
             return;
         }
-        await client.sync(await cache.entries());
-        let data = await client.query(filter);
-        await cache.clear();
-        await cache.update(data.entries);
+        // update feed-list only when no feed is selected
+        if(filter.feed == 0) {
+            await cache.update_feeds(await client.get_feeds());
+            feeds = await cache.get_feeds();
+            await cache.clear();
+        }
+        await client.sync(await cache.get_entries());
+        let _data = await client.query(filter);
+        return cache.update(_data.entries);
     }
 
     async function refresh(_sync=false) {
         if(cache.age == null || _sync || force_sync) {
+            force_sync = false;
             await sync();
+        }
+        if(!feeds) {
+            feeds = await cache.get_feeds();
         }
         data = await cache.query(filter);
     }
@@ -54,9 +64,8 @@
         </div>
     </nav>
 
-    {#if data}
     <Pager/>
-    <h1>Articles ({data.length})</h1>
+    <h1>Articles{#if data} ({data.length}){/if}</h1>
     <nav>
         <span>
             <button on:click={(e) => {filter.setStatus("read"); refresh();}}>Read</button>
@@ -69,21 +78,26 @@
                 <option value="latest">Latest</option>
                 <option value="oldest">Oldest</option>
             </select>
+            {#if feeds}
             &nbsp;
             <label for="sort">Feed:</label>
             <select name="feed" on:change={(e) => {filter.setFeed(parseInt(e.target.value)); refresh();}}>
-            {#await cache.feeds() then feeds} 
-                <option value="1">TODO</option>
-            {/await}
+                <option value="0">All</option>
+            {#each feeds as feed}
+                {#if feed.id == filter.feed}<option value="{feed.id}" selected>{feed.title}</option>{:else}
+                <option value="{feed.id}">{feed.title}</option>{/if}
+            {/each}
             </select>
+            {/if}
         </span>
     </nav>
+    {#if data}
     <ul>
     {#each data as entry}
       <li>
         <button class="close" on:click={(e) => {cache.mark(entry.id, "REMOVED"); e.currentTarget.parentElement.remove();}}>x</button>
         <a href="article/{entry.id}" on:click|preventDefault={(e) => navigateTo("Article", {"id": entry.id})}>
-            <h2>{entry.title}</h2>
+            <h2>{entry.title}{#if entry.status == "read"}&nbsp;(read){/if}</h2>
             <em>From {entry.feed.title} published <date>{formatDate(entry.published_at)}, changed: {formatDate(entry.changed_at)}</date></em>
         </a>
       </li>
@@ -133,6 +147,10 @@
     nav {
         display: flex;
         justify-content: space-between;
+    }
+    select {
+        max-width: 8em;
+        overflow: hidden;
     }
     @media (prefers-color-scheme: light) {
         ul li a {
