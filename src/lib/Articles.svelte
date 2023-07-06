@@ -55,13 +55,25 @@
 </script>
 
 <main>
-    <nav style="justify-content: flex-end;">
-        <div>
+    <nav>
+        <span>
             {#if cache.age != null}
             Last sync: {#if as_days_ago(cache.age) > 0}{as_days_ago(cache.age)} days{:else}a moment{/if} ago |
             {/if}
             <button on:click={() => {refresh(true)}}>🗘</button>
-        </div>
+        </span>
+        <span>
+            {#if feeds}
+            <label for="sort">Feeds:</label>
+            <select name="feed" on:change={(e) => {filter.setFeed(parseInt(e.target.value)); refresh();}}>
+                <option value="0">All</option>
+            {#each feeds as feed}
+                {#if feed.id == filter.feed}<option value="{feed.id}" selected>{feed.title}</option>{:else}
+                <option value="{feed.id}">{feed.title}</option>{/if}
+            {/each}
+            </select>
+            {/if}
+        </span>
     </nav>
 
     <Pager/>
@@ -78,17 +90,6 @@
                 <option value="latest">Latest</option>
                 <option value="oldest">Oldest</option>
             </select>
-            {#if feeds}
-            &nbsp;
-            <label for="sort">Feed:</label>
-            <select name="feed" on:change={(e) => {filter.setFeed(parseInt(e.target.value)); refresh();}}>
-                <option value="0">All</option>
-            {#each feeds as feed}
-                {#if feed.id == filter.feed}<option value="{feed.id}" selected>{feed.title}</option>{:else}
-                <option value="{feed.id}">{feed.title}</option>{/if}
-            {/each}
-            </select>
-            {/if}
         </span>
     </nav>
     {#if data}
