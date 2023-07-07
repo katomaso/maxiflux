@@ -164,6 +164,12 @@ class Cache {
     });
   }
 
+  async count() {
+    return promise_result(
+      this.db.transaction(["articles"], "readwrite").objectStore("articles").count()
+    );
+  }
+
   async update(entries) {
     let db = await this.dbPromise;
     const dbx = db.transaction(["articles"], "readwrite").objectStore("articles");

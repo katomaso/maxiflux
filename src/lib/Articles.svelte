@@ -60,7 +60,7 @@
             {#if cache.age != null}
             Last sync: {#if as_days_ago(cache.age) > 0}{as_days_ago(cache.age)} days{:else}a moment{/if} ago |
             {/if}
-            <button on:click={() => {refresh(true)}}>🗘</button>
+            <button on:click={() => {refresh(true)}}>Sync ⭳</button>
         </span>
         <span>
             {#if feeds}
@@ -93,6 +93,7 @@
         </span>
     </nav>
     {#if data}
+    <em>Showing {data.length} from {#await cache.count then count}{count}{/await} cached records</em>
     <ul>
     {#each data as entry}
       <li>
@@ -104,6 +105,8 @@
       </li>
     {/each}
     </ul>
+    {:else}
+    No data - please hit sync button
     {/if}
 </main>
 
