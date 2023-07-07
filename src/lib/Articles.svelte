@@ -50,7 +50,7 @@
 
     onMount(async () => {
         await cache.connect();
-        refresh();
+        return refresh();
     });
 </script>
 
@@ -93,7 +93,7 @@
         </span>
     </nav>
     {#if data}
-    <em>Showing {data.length} from {#await cache.count then count}{count}{/await} cached records</em>
+    <em>Showing {data.length} from {#await cache.get_count() then count}{count}{/await} cached records</em>
     <ul>
     {#each data as entry}
       <li>

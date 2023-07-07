@@ -6,7 +6,6 @@ import { EntryStatus } from "./miniflux";
 function promise_result(req) {
   return new Promise((resolve, _) => {
     req.onsuccess = () => {
-      console.log("PromiseResult resolved: ", req.result);
       resolve(req.result);
     } 
   });
@@ -164,7 +163,7 @@ class Cache {
     });
   }
 
-  async count() {
+  async get_count() {
     return promise_result(
       this.db.transaction(["articles"], "readwrite").objectStore("articles").count()
     );
@@ -173,8 +172,8 @@ class Cache {
   async update(entries) {
     let db = await this.dbPromise;
     const dbx = db.transaction(["articles"], "readwrite").objectStore("articles");
-    console.log("Cache updated");
-    
+    console.log("Cache updating");
+
     function max(values) {
       let max = values[0];
       for (let i = 1; i < values.length; i++) {
@@ -193,7 +192,10 @@ class Cache {
           resolve();
         }
       }
-    ))).then(() => localStorage.setItem("cache_updated", now.toISOString()));
+    ))).then((promised) => {
+      console.log("Cache updated with", promised.length, "records");
+      localStorage.setItem("cache_updated", now.toISOString());
+    });
   }
 
   async update_feeds(feeds) {
