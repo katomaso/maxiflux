@@ -42,9 +42,9 @@
             force_sync = false;
             await sync();
         }
-        if(!feeds) {
-            feeds = await cache.get_feeds();
-        }
+        // if(!feeds) {
+        //     feeds = await cache.get_feeds();
+        // }
         data = await cache.query(filter);
     }
 
@@ -77,7 +77,7 @@
     </nav>
 
     <Pager/>
-    <h1>Articles{#if data} ({data.length}){/if}</h1>
+    <h1>Articles ({#if data}{data.length}{:else}{#await cache.get_count() then count}{count}{/await}{/if})</h1>
     <nav>
         <span>
             <button on:click={(e) => {filter.setStatus("read"); refresh();}}>Read</button>
