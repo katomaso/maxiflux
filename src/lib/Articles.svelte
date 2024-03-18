@@ -26,25 +26,27 @@
             sneakPeakTo("Connect", {force_sync: true});
             return;
         }
-        // update feed-list only when no feed is selected
-        if(filter.feed == 0) {
-            await cache.update_feeds(await client.get_feeds());
-            feeds = await cache.get_feeds();
-            await cache.clear();
+        let _entries = await cache.get_entries();
+        if(_entries) {
+            await client.sync(_entries);
         }
-        await client.sync(await cache.get_entries());
+        // clear cache only when no feed is selected - "full update"
+        if(filter.feed == 0) await cache.clear();
         let _data = await client.query(filter);
         return cache.update(_data.entries);
     }
 
     async function refresh(_sync=false) {
         if(cache.age == null || _sync || force_sync) {
+            if(force_sync) {
+                await cache.update_feeds(await client.get_feeds());
+            }
             force_sync = false;
             await sync();
         }
-        // if(!feeds) {
-        //     feeds = await cache.get_feeds();
-        // }
+        if(!feeds) {
+            feeds = await cache.get_feeds();
+        }
         data = await cache.query(filter);
     }
 
